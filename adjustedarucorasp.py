@@ -1,6 +1,5 @@
 import cv2
 import cv2.aruco as aruco
-import numpy as np
 
 # Function to capture frames using libcamera and OpenCV
 def get_frame(cap):
@@ -12,7 +11,7 @@ def get_frame(cap):
 
 
 def main():
-    # Define GStreamer pipeline for libcamera (IMX477 sensor)
+    # Use the correct GStreamer pipeline to open Raspberry Pi camera (IMX477)
     cap = cv2.VideoCapture(
         'libcamerasrc ! video/x-raw,width=1280,height=720,framerate=30/1 ! '
         'videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink',
