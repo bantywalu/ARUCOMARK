@@ -1,0 +1,1 @@
+gst-launch-1.0 libcamerasrc ! 'video/x-raw, width=2028, height=1520, framerate=30/1' ! videoconvert ! videoscale ! video/x-raw,format=BGR ! autovideosink
