@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
 import cv2
 import cv2.aruco as aruco
-import matplotlib.pyplot as plt
+
 
 def get_frame(cap):
     ret, frame = cap.read()
@@ -86,6 +86,7 @@ def get_frame(cap):
         print("Error: Unable to capture frame from camera.")
         return None
     return frame
+
 
 def main():
     cap = cv2.VideoCapture(
@@ -101,10 +102,7 @@ def main():
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters()
 
-    print("Starting ArUco marker detection. Press Ctrl+C in terminal to exit.")
-
-    plt.ion()
-    fig, ax = plt.subplots()
+    print("Starting ArUco marker detection. Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -113,35 +111,19 @@ def main():
                 break
 
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
             corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
             if ids is not None and len(ids) > 0:
-                aruco.drawDetectedMarkers(frame, corners, ids)
-                for i, marker_corner in enumerate(corners):
-                    top_left = marker_corner[0][0]
-                    cv2.putText(
-                        frame,
-                        f"ID: {ids[i][0]}",
-                        (int(top_left[0]), int(top_left[1]) - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.5,
-                        (0, 255, 0),
-                        2
-                    )
-                    print(f"Detected marker ID: {ids[i][0]}")
-
-            ax.clear()
-            ax.imshow(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            plt.pause(0.001)
+                for marker_id in ids:
+                    print(f"Detected marker ID: {marker_id[0]}")
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        print("Stopping detection.")
 
     cap.release()
-    plt.ioff()
-    plt.close()
+
 
 if __name__ == '__main__':
     main()
+
 
