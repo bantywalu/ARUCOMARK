@@ -19,3 +19,20 @@ while vehicle.armed:
 
 print("[INFO] Disarmed. Closing connection.")
 vehicle.close()
+
+
+
+# Start a 30-second timer to auto-disarm
+def auto_disarm_after_timeout(timeout=30):
+    print(f"[INFO] Auto-disarm will trigger in {timeout} seconds...")
+    time.sleep(timeout)
+    if vehicle.armed:
+        print("[INFO] Auto-disarming...")
+        vehicle.armed = False
+
+# Call this right after arming
+vehicle.armed = True
+
+# Start the timer in the background
+import threading
+threading.Thread(target=auto_disarm_after_timeout, daemon=True).start()
