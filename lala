@@ -1,8 +1,8 @@
 import cv2
 import cv2.aruco as aruco
 
-# Open the camera (0 is default for most webcams or Pi camera with /dev/video0)
-cap = cv2.VideoCapture(0)
+# Open the Pi Camera (using V4L2 backend to avoid GStreamer issues)
+cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
 
 # Load predefined dictionary
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
@@ -11,21 +11,22 @@ parameters = aruco.DetectorParameters_create()
 while True:
     ret, frame = cap.read()
     if not ret:
+        print("Failed to grab frame")
         break
 
-    # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # Detect markers
+    # Detect ArUco markers
     corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
-    # Draw markers
     if ids is not None:
         aruco.drawDetectedMarkers(frame, corners, ids)
         print("Detected IDs:", ids.flatten())
 
+    # Display the frame
     cv2.imshow("ArUco Marker Detection", frame)
 
+    # Press 'q' to exit
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
