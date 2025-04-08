@@ -1,25 +1,27 @@
 import cv2
 import cv2.aruco as aruco
+import math
 
-
-MARKER_REAL_SIZE = 0.05  # Actual marker width in meters (5 cm)
-FOCAL_LENGTH = 800       # Adjust based on calibration if needed
+# Constants
+MARKER_REAL_SIZE = 0.05  # Real size in meters (e.g., 5 cm)
+FOCAL_LENGTH = 800       # Estimated focal length in pixels
 
 def estimate_distance(pixel_width):
     if pixel_width == 0:
         return None
     return (MARKER_REAL_SIZE * FOCAL_LENGTH) / pixel_width
+
 def get_frame(cap):
     ret, frame = cap.read()
     if not ret:
-        print("Error: Unable to capture frame from camera.")
+        print("Error: Unable to capture frame.")
         return None
     return frame
 
 def main():
     cap = cv2.VideoCapture(
-        "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
-        "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink",
+        'libcamerasrc ! video/x-raw,width=1280,height=720,framerate=30/1 ! '
+        'videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink',
         cv2.CAP_GSTREAMER
     )
 
@@ -28,9 +30,9 @@ def main():
         return
 
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
-    parameters = aruco.DetectorParameters_create()
+    parameters = aruco.DetectorParameters()
 
-    print("Starting ArUco marker detection. Press 'q' to exit.")
+    print("Starting ArUco detection with distance estimation. Press 'q' to quit.")
 
     while True:
         frame = get_frame(cap)
@@ -40,97 +42,27 @@ def main():
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
-        frame_height, frame_width = frame.shape[:2]
-        frame_center = (frame_width // 2, frame_height // 2)
-        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)
-
-        if ids is not None and len(ids) > 0:
+        if ids is not None:
             aruco.drawDetectedMarkers(frame, corners, ids)
             for i, marker_corner in enumerate(corners):
                 pts = marker_corner[0]
-                marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
-                cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
+                top_left = pts[0]
+                top_right = pts[1]
 
-                dx = marker_center[0] - frame_center[0]
-                dy = marker_center[1] - frame_center[1]
-                threshold = 20
-                guidance = []
-
-                if dx > threshold:
-                    guidance.append("Move Left")
-                elif dx < -threshold:
-                    guidance.append("Move Right")
-
-                if dy > threshold:
-                    guidance.append("Move Up")
-                elif dy < -threshold:
-                    guidance.append("Move Down")
-
-                guidance_text = "Centered" if not guidance else ", ".join(guidance)
-                cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-
-                pt1 = pts[0]
-                pt2 = pts[1]
-                pixel_width = math.hypot(pt2[0] - pt1[0], pt2[1] - pt1[1])
+                # Estimate distance
+                pixel_width = math.hypot(top_right[0] - top_left[0], top_right[1] - top_left[1])
                 distance = estimate_distance(pixel_width)
 
+                # Display ID and distance
                 if distance is not None:
-                    distance_text = f"{distance:.2f} m"
-                    cv2.putText(frame, distance_text, (marker_center[0] - 50, marker_center[1] + 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                    print(f"Marker ID {ids[i][0]} | Distance: {distance:.2f} m | {guidance_text}")
+                    cv2.putText(frame, f"ID: {ids[i][0]}, {distance:.2f}m",
+                                (int(top_left[0]), int(top_left[1]) - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                    print(f"ID: {ids[i][0]} - Distance: {distance:.2f} meters")
 
-                break  # Only process one markerwhile True:
-        frame = get_frame(cap)
-        if frame is None:
+        cv2.imshow("ArUco Detection with Distance", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-
-        frame_height, frame_width = frame.shape[:2]
-        frame_center = (frame_width // 2, frame_height // 2)
-        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)
-
-        if ids is not None and len(ids) > 0:
-            aruco.drawDetectedMarkers(frame, corners, ids)
-            for i, marker_corner in enumerate(corners):
-                pts = marker_corner[0]
-                marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
-                cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
-
-                dx = marker_center[0] - frame_center[0]
-                dy = marker_center[1] - frame_center[1]
-                threshold = 20
-                guidance = []
-
-                if dx > threshold:
-                    guidance.append("Move Left")
-                elif dx < -threshold:
-                    guidance.append("Move Right")
-
-                if dy > threshold:
-                    guidance.append("Move Up")
-                elif dy < -threshold:
-                    guidance.append("Move Down")
-
-                guidance_text = "Centered" if not guidance else ", ".join(guidance)
-                cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-
-                pt1 = pts[0]
-                pt2 = pts[1]
-                pixel_width = math.hypot(pt2[0] - pt1[0], pt2[1] - pt1[1])
-                distance = estimate_distance(pixel_width)
-
-                if distance is not None:
-                    distance_text = f"{distance:.2f} m"
-                    cv2.putText(frame, distance_text, (marker_center[0] - 50, marker_center[1] + 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
-                    print(f"Marker ID {ids[i][0]} | Distance: {distance:.2f} m | {guidance_text}")
-
-                break  # Only process one marker
 
     cap.release()
     cv2.destroyAllWindows()
