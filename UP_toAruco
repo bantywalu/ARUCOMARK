@@ -15,11 +15,11 @@ from pymavlink import mavutil
 ASCEND_VELOCITY  = -0.3      # In local NED: negative Z means upward (m/s)
 DESCEND_VELOCITY =  0.3      # In local NED: positive Z means downward (m/s)
 COMMAND_DURATION = 1         # Duration (seconds) for each velocity command
-GPS_TARGET_MARKER_ID = 23    # The ArUco marker ID to trigger descent (adjust as needed)
-THRESHOLD = 20               # Pixel threshold for deciding the marker is "Centered"
+GPS_TARGET_MARKER_ID = 23    # The ArUco marker ID that triggers descent
+THRESHOLD = 20               # Pixel threshold for marker center determination
 SERIAL_BAUD = 57600          # Baud rate for Pixhawk connection
 CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']
-NO_MARKER_TIMEOUT = 20       # Maximum time (seconds) to wait for a marker before landing
+NO_MARKER_TIMEOUT = 20       # Time (in seconds) to wait before aborting (landing) if no marker is seen
 
 # ----- Helper Functions -----
 def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z, duration):
@@ -33,10 +33,11 @@ def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z, duration):
         mavutil.mavlink.MAV_FRAME_LOCAL_NED,  # frame
         0b0000111111000111,                   # type_mask (only velocity enabled)
         0, 0, 0,                              # x, y, z positions (not used)
-        velocity_x, velocity_y, velocity_z,     # velocities in m/s
-        0, 0, 0,                              # accelerations (not used)
+        velocity_x, velocity_y, velocity_z,    # velocities in m/s
+        0, 0, 0,                              # accelerations (not supported)
         0, 0                                  # yaw, yaw_rate (not used)
     )
+    print(f"Sending NED velocity: vx={velocity_x}, vy={velocity_y}, vz={velocity_z} for {duration}s")
     end_time = time.time() + duration
     while time.time() < end_time:
         vehicle.send_mavlink(msg)
@@ -70,10 +71,10 @@ def main():
     if vehicle is None:
         return
 
-    # Wait briefly to allow telemetry to start.
+    # Allow a brief delay for initial telemetry.
     time.sleep(2)
 
-    # Arm the vehicle (without a takeoff routine).
+    # Arm the vehicle (without a takeoff routine, so motors should spin up).
     print("Arming vehicle...")
     while not vehicle.is_armable:
         print(" Waiting for vehicle to become armable...")
@@ -83,7 +84,7 @@ def main():
     while not vehicle.armed:
         print(" Waiting for arming...")
         time.sleep(1)
-    print("Vehicle armed. Starting upward motion.")
+    print("Vehicle armed. Sending velocity commands now.")
 
     # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi).
     cv2.namedWindow("ArUco Detection", cv2.WINDOW_NORMAL)
@@ -103,10 +104,9 @@ def main():
 
     print("Starting marker detection loop.")
     print("The drone will continuously command upward velocity until the target marker is detected.")
-    print("If no marker is detected within 20 seconds, the drone will land.")
+    print("If no marker is detected within 20 seconds, the drone will be commanded to land.")
 
     detection_start_time = time.time()
-    marker_detected = False
 
     try:
         while True:
@@ -115,25 +115,26 @@ def main():
                 print("Failed to capture frame from camera.")
                 continue
 
-            # Compute the center of the frame.
+            # Determine the center of the frame.
             frame_height, frame_width = frame.shape[:2]
             frame_center = (frame_width // 2, frame_height // 2)
-            cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Blue dot at frame center
+            cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Blue dot at center
 
-            # Convert frame to grayscale for ArUco detection.
+            # Convert frame to grayscale and detect ArUco markers.
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
             marker_found_in_frame = False
-
             if ids is not None:
+                print("Detected markers with IDs:", ids.flatten())
                 for i, marker_corners in enumerate(corners):
+                    # Draw the marker and compute its center.
                     aruco.drawDetectedMarkers(frame, corners, ids)
                     pts = marker_corners[0]
                     marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
                     cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)  # Red dot for marker center
 
-                    # Calculate offset from frame center.
+                    # Compute offset from frame center.
                     dx = marker_center[0] - frame_center[0]
                     dy = marker_center[1] - frame_center[1]
                     guidance = []
@@ -146,34 +147,36 @@ def main():
                     elif dy < -THRESHOLD:
                         guidance.append("Move Down")
                     guidance_text = "Centered" if not guidance else ", ".join(guidance)
-                    cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
+                    cv2.putText(frame, guidance_text, (marker_center[0]-50, marker_center[1]-20),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                    # Check if this is the target marker and if it's centered.
+                    print(f"Marker ID {ids[i][0]} at {marker_center} with guidance: {guidance_text}")
+
+                    # Check if the target marker is detected and is centered.
                     if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
                         marker_found_in_frame = True
                     break  # Process only the first detected marker.
 
+            # Show the camera feed.
             cv2.imshow("ArUco Detection", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-            # Check timeout for detecting marker.
+            # Check for timeout.
             elapsed = time.time() - detection_start_time
             if elapsed > NO_MARKER_TIMEOUT and not marker_found_in_frame:
                 print("No marker detected within 20 seconds. Initiating landing.")
                 break
 
-            # Send appropriate velocity command.
+            # Send velocity commands based on marker detection.
             if marker_found_in_frame:
                 print("Target marker detected and centered. Commanding descent...")
-                marker_detected = True
                 send_ned_velocity(vehicle, 0, 0, DESCEND_VELOCITY, COMMAND_DURATION)
             else:
                 print("No marker detected. Commanding upward motion...")
                 send_ned_velocity(vehicle, 0, 0, ASCEND_VELOCITY, COMMAND_DURATION)
     except KeyboardInterrupt:
-        print("User interruption detected. Exiting control loop.")
+        print("User interrupted the control loop.")
 
     # Command landing.
     print("Commanding landing...")
