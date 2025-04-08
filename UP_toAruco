@@ -12,12 +12,12 @@ from dronekit import connect, VehicleMode
 from pymavlink import mavutil
 
 # ----- CONFIGURATION CONSTANTS -----
-# Set hover velocity (zero velocity for stop/hover)
-HOVER_VELOCITY = 0.0       # No movement
-COMMAND_DURATION = 1       # Duration (seconds) for each velocity command
-GPS_TARGET_MARKER_ID = 23  # The ArUco marker ID that triggers descent (if needed)
-NO_MARKER_TIMEOUT = 20     # Maximum hover time (in seconds) before landing if no marker is seen
-SERIAL_BAUD = 57600        # Baud rate for Pixhawk connection
+ASCEND_VELOCITY  = -0.3      # In local NED: negative Z means upward (m/s)
+DESCEND_VELOCITY =  0.3      # In local NED: positive Z means downward (m/s)
+COMMAND_DURATION = 1         # Duration (seconds) for each velocity command
+GPS_TARGET_MARKER_ID = 23    # The ArUco marker ID that triggers landing (optional use)
+NO_MARKER_TIMEOUT = 20       # Maximum time (seconds) to keep ascending if no marker is seen
+SERIAL_BAUD = 57600          # Baud rate for Pixhawk connection
 CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']
 
 # ----- Helper Functions -----
@@ -25,7 +25,6 @@ def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z, duration):
     """
     Sends command to the drone to move with specified velocities (m/s) in local NED.
     In NED, velocity_z < 0 means upward; velocity_z > 0 means downward.
-    For a hover we send zero velocities.
     """
     msg = vehicle.message_factory.set_position_target_local_ned_encode(
         0,      # time_boot_ms (not used)
@@ -37,7 +36,7 @@ def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z, duration):
         0, 0, 0,                              # accelerations (not supported)
         0, 0                                  # yaw, yaw_rate (not used)
     )
-    print(f"Sending NED velocity: vx={velocity_x}, vy={velocity_y}, vz={velocity_z} for {duration}s")
+    print(f"Sending NED velocity: vx={velocity_x}, vy={velocity_y}, vz={velocity_z} for {duration} seconds")
     end_time = time.time() + duration
     while time.time() < end_time:
         vehicle.send_mavlink(msg)
@@ -84,7 +83,7 @@ def main():
     while not vehicle.armed:
         print(" Waiting for arming...")
         time.sleep(1)
-    print("Vehicle armed. Hovering in place for up to 20 seconds while scanning for an ArUco marker.")
+    print("Vehicle armed. Now ascending until an ArUco marker is detected.")
 
     # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi).
     cv2.namedWindow("ArUco Detection", cv2.WINDOW_NORMAL)
@@ -102,7 +101,7 @@ def main():
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters_create()
 
-    # Start the hover and detection loop.
+    # Start the ascend and detection loop.
     detection_start_time = time.time()
     marker_detected = False
 
@@ -124,20 +123,17 @@ def main():
 
             if ids is not None:
                 print("Detected markers with IDs:", ids.flatten())
-                # For this example we consider any detected marker as the landing trigger,
-                # regardless of its orientation or position.
+                # If a marker is detected, stop ascending and break out of the loop.
                 marker_detected = True
-                # Optionally, you could add extra checks on marker position/orientation here.
                 cv2.putText(frame, "Marker Detected!", (30, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-                # Break out of the detection loop.
-                print("Marker detected. Initiating landing sequence.")
+                print("Marker detected. Stopping ascent and initiating landing sequence.")
                 cv2.imshow("ArUco Detection", frame)
                 cv2.waitKey(500)
                 break
 
-            # Display guidance (if desired, you can add overlay text here).
-            cv2.putText(frame, "Hovering...", (30, 30),
+            # Display current status on the frame.
+            cv2.putText(frame, "Ascending...", (30, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
             cv2.imshow("ArUco Detection", frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -146,18 +142,17 @@ def main():
             # Check if 20 seconds have elapsed.
             elapsed = time.time() - detection_start_time
             if elapsed > NO_MARKER_TIMEOUT:
-                print("No marker detected within 20 seconds.")
+                print("No marker detected within 20 seconds. Stopping ascent.")
                 break
 
-            # While hovering, send a zero velocity command.
-            send_ned_velocity(vehicle, 0, 0, HOVER_VELOCITY, COMMAND_DURATION)
+            # While no marker is detected, send the upward (ascend) velocity command.
+            send_ned_velocity(vehicle, 0, 0, ASCEND_VELOCITY, COMMAND_DURATION)
     except KeyboardInterrupt:
-        print("User interrupted the detection loop.")
+        print("User interrupted the control loop.")
 
-    # Command landing regardless of detection.
+    # Command landing.
     print("Commanding landing...")
     vehicle.mode = VehicleMode("LAND")
-    # Allow some time for landing command to be processed.
     time.sleep(10)
 
     # Cleanup resources.
