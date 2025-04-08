@@ -95,3 +95,117 @@ def main():
 
 if __name__ == '__main__':
     main()
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+[1:58:40.762366485] [151227]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[1:58:40.772682346] [151277]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[1:58:40.786680761] [151277]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[1:58:40.792546232] [151280]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
+[1:58:40.792869400] [151277]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
+[ WARN:0@1.135] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
+[ WARN:0@1.135] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Starting ArUco marker detection. Press 'q' to exit.
+^CTraceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 106, in <module>
+    main()
+  File "/home/leuleb/Documents/aruco_guided.py", line 46, in main
+    corners, ids, rejected = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+^C/usr/bin/python /home/leuleb/Documents/aruco_guideTraceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1167, in _find_and_load
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 1, in <module>
+    import cv2
+ImportError: numpy.core.multiarray failed to import
+d.py
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+^CTraceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1167, in _find_and_load
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 1, in <module>
+    import cv2
+ImportError: numpy.core.multiarray failed to import
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+^C/usr/bin/python /home/leuleb/Documents/aruco_guided.py
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1167, in _find_and_load
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 1, in <module>
+    import cv2
+ImportError: numpy.core.multiarray failed to import
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+^C/usr/bin/python /home/leuleb/Documents/aruco_guided.py
+Traceback (most recent call last):
+  File "<frozen importlib._bootstrap>", line 1167, in _find_and_load
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 1, in <module>
+    import cv2
+ImportError: numpy.core.multiarray failed to import
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+[1:59:19.093014058] [152103]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[1:59:19.101712746] [152156]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[1:59:19.115564771] [152156]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[1:59:19.118641489] [152159]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
+[1:59:19.119195658] [152156]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
+[ WARN:0@1.077] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
+[ WARN:0@1.077] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Starting ArUco marker detection. Press 'q' to exit.
+clear
+^CTraceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 106, in <module>
+    main()
+  File "/home/leuleb/Documents/aruco_guided.py", line 46, in main
+    corners, ids, rejected = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_guided.py
+[1:59:29.660023545] [152379]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[1:59:29.669215161] [152428]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[1:59:29.683653022] [152428]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[1:59:29.686936760] [152431]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
+[1:59:29.688215691] [152428]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
+[ WARN:0@1.108] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
+[ WARN:0@1.108] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Starting ArUco marker detection. Press 'q' to exit.
+^CTraceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_guided.py", line 106, in <module>
+    main()
+  File "/home/leuleb/Documents/aruco_guided.py", line 46, in main
+    corners, ids, rejected = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+/usr/bin/python /home/leuleb/Documents/aruco_track.py
+
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_track.py
+[2:10:46.814624306] [165801]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[2:10:46.826560749] [165858]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[2:10:46.844563367] [165858]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[2:10:46.848614589] [165865]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
+[2:10:46.848913869] [165858]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
+[ WARN:0@1.137] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
+[ WARN:0@1.137] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Starting ArUco marker detection. Press 'q' to exit.
+^CTraceback (most recent call last):
+  File "/home/leuleb/Documents/aruco_track.py", line 139, in <module>
+    main()
+  File "/home/leuleb/Documents/aruco_track.py", line 41, in main
+    corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_track.py
+[2:18:40.032128793] [175232]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[2:18:40.044925221] [175286]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[2:18:40.063482462] [175286]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[2:18:40.066791370] [175291]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
+[2:18:40.067017205] [175286]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
+[ WARN:0@1.121] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
+[ WARN:0@1.121] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
+Starting ArUco marker detection. Press 'q' to exit.
