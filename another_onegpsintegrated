@@ -16,9 +16,7 @@ MARKER_REAL_SIZE = 0.05       # Actual marker width in meters (e.g., 5 cm)
 FOCAL_LENGTH = 800            # Estimated focal length in pixels (adjust via calibration)
 GPS_TARGET_MARKER_ID = 23     # Marker ID that triggers GPS capture after centering
 SERIAL_BAUD = 57600           # Baud rate for Pixhawk connection
-
-# List of possible connection strings (update as needed)
-CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']
+CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']  # List of possible ports
 
 def estimate_distance(pixel_width):
     """
@@ -73,10 +71,10 @@ def main():
     if vehicle is None:
         return
 
-    # Optional: Wait a bit for initial telemetry to begin coming in.
+    # Optional delay to allow initial telemetry to start coming in.
     time.sleep(2)
 
-    # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi)
+    # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi).
     cap = cv2.VideoCapture(
         "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
         "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink",
@@ -87,7 +85,7 @@ def main():
         vehicle.close()
         return
 
-    # Initialize ArUco marker detection
+    # Initialize ArUco marker detection.
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters_create()
 
@@ -99,28 +97,27 @@ def main():
         if frame is None:
             break
 
-        # Determine frame dimensions and compute center of the frame.
+        # Get frame dimensions and compute the frame center.
         frame_height, frame_width = frame.shape[:2]
         frame_center = (frame_width // 2, frame_height // 2)
-        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw the center as a blue dot
+        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw the center as a blue dot.
 
-        # Convert the frame to grayscale and detect ArUco markers.
+        # Convert frame to grayscale for marker detection.
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
         if ids is not None:
+            # Process the first detected marker.
             for i, marker_corners in enumerate(corners):
-                # Draw the detected marker boundaries and ID.
                 aruco.drawDetectedMarkers(frame, corners, ids)
                 pts = marker_corners[0]
-                # Compute the marker centroid.
                 marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
                 cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
 
-                # Compute offset between marker center and frame center.
+                # Calculate the offsets between marker center and frame center.
                 dx = marker_center[0] - frame_center[0]
                 dy = marker_center[1] - frame_center[1]
-                threshold = 20  # Pixel threshold for considering the marker centered
+                threshold = 20  # Pixel threshold for centering.
                 guidance = []
                 if dx > threshold:
                     guidance.append("Move Left")
@@ -131,11 +128,14 @@ def main():
                 elif dy < -threshold:
                     guidance.append("Move Down")
                 guidance_text = "Centered" if not guidance else ", ".join(guidance)
+                
                 cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                # Check if the detected marker is the designated GPS trigger marker and is centered.
+                # Check if the detected marker is the designated one and is centered.
                 if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
+                    # Wait briefly before retrieving GPS data to let any transient issues settle.
+                    time.sleep(2)
                     gps_location = get_vehicle_gps(vehicle)
                     if gps_location is not None:
                         lat, lon = gps_location
