@@ -12,9 +12,12 @@ from dronekit import connect, VehicleMode
 import time
 
 # ---- Configuration Constants ----
-MARKER_REAL_SIZE = 0.05  # Actual marker width in meters (e.g., 5 cm)
+MARKER_REAL_SIZE = 0.05  # Marker width in meters (e.g., 5 cm)
 FOCAL_LENGTH = 800       # Estimated focal length in pixels (adjust via calibration)
 GPS_TARGET_MARKER_ID = 23  # Marker ID that triggers GPS capture
+
+# Maximum number of seconds to wait for telemetry from the vehicle.
+TELEMETRY_TIMEOUT = 60
 
 def estimate_distance(pixel_width):
     """
@@ -42,14 +45,37 @@ def get_vehicle_gps(vehicle):
         return location.lat, location.lon
     return None
 
+def wait_for_telemetry(vehicle, timeout=TELEMETRY_TIMEOUT):
+    """
+    Wait up to 'timeout' seconds for basic telemetry data (like location fix and heartbeat)
+    to become available from the vehicle.
+    """
+    start_time = time.time()
+    print("Waiting for telemetry to become available...")
+    while time.time() - start_time < timeout:
+        # Check if vehicle has a valid GPS fix (fix_type > 1) and non-null latitude/longitude.
+        fix_type = getattr(vehicle.gps_0, 'fix_type', 0)
+        location = vehicle.location.global_frame
+        # Alternatively, check for heartbeat with vehicle.last_heartbeat (if available)
+        if fix_type > 1 and location.lat is not None and location.lon is not None:
+            print("Telemetry is available.")
+            return True
+        time.sleep(1)
+    return False
+
 def main():
-    # Connect to Pixhawk autopilot via DroneKit.
+    print("Connecting to Pixhawk autopilot...")
     try:
-        print("Connecting to Pixhawk autopilot...")
-        # Adjust connection string and baud rate as necessary
-        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=True)
+        # Connect without waiting ready; we'll implement a custom check.
+        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=False)
     except Exception as e:
         print("Error connecting to Pixhawk:", e)
+        return
+
+    # Wait until telemetry (GPS fix, heartbeat) becomes available or timeout is reached.
+    if not wait_for_telemetry(vehicle):
+        print("Telemetry did not become available within the timeout period.")
+        vehicle.close()
         return
 
     # Open camera using a GStreamer pipeline (suitable for Raspberry Pi)
@@ -68,7 +94,7 @@ def main():
     parameters = aruco.DetectorParameters_create()
 
     print("Starting marker detection with centering guidance.")
-    print("Adjust position until the marker is 'Centered' (within threshold).")
+    print("Adjust position until the marker is 'Centered' (within threshold) for GPS capture.")
     
     while True:
         frame = get_frame(cap)
@@ -78,8 +104,7 @@ def main():
         # Determine frame dimensions and center
         frame_height, frame_width = frame.shape[:2]
         frame_center = (frame_width // 2, frame_height // 2)
-        # Optionally, draw the frame center (blue dot)
-        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)
+        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw center as blue dot
 
         # Convert frame to grayscale for marker detection.
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -88,17 +113,15 @@ def main():
         if ids is not None:
             # Process the first detected marker.
             for i, marker_corners in enumerate(corners):
-                # Draw marker boundaries and IDs.
                 aruco.drawDetectedMarkers(frame, corners, ids)
                 pts = marker_corners[0]
-                # Calculate the marker's centroid.
                 marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
                 cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
 
-                # Compute the difference between marker center and frame center.
+                # Compute center offset.
                 dx = marker_center[0] - frame_center[0]
                 dy = marker_center[1] - frame_center[1]
-                threshold = 20  # pixel threshold for 'centering'
+                threshold = 20  # pixel threshold for centering
                 guidance = []
                 if dx > threshold:
                     guidance.append("Move Left")
@@ -108,28 +131,24 @@ def main():
                     guidance.append("Move Up")
                 elif dy < -threshold:
                     guidance.append("Move Down")
-
                 guidance_text = "Centered" if not guidance else ", ".join(guidance)
                 cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                # Only process if the marker is our trigger marker.
-                if ids[i][0] == GPS_TARGET_MARKER_ID:
-                    if guidance_text == "Centered":
-                        gps_location = get_vehicle_gps(vehicle)
-                        if gps_location is not None:
-                            lat, lon = gps_location
-                            print(f"GPS Location captured: Latitude: {lat:.6f}, Longitude: {lon:.6f}")
-                        else:
-                            print("GPS location not available.")
-                        # Clean up and exit after capturing GPS.
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        vehicle.close()
-                        return
+                # If marker is the designated one and centered, print GPS and exit.
+                if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
+                    gps_location = get_vehicle_gps(vehicle)
+                    if gps_location is not None:
+                        lat, lon = gps_location
+                        print(f"GPS Location captured: Latitude: {lat:.6f}, Longitude: {lon:.6f}")
+                    else:
+                        print("GPS location not available.")
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    vehicle.close()
+                    return
 
-                # Process only the first detected marker.
-                break
+                break  # Process only the first detected marker.
 
         cv2.imshow("ArUco Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
