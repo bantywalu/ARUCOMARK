@@ -1,0 +1,23 @@
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/aruco_track.py
+[2:33:51.811946286] [194032]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
+[2:33:51.819154136] [194069]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
+[2:33:51.830222080] [194069]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_C0
+[2:33:51.833598374] [194072]  INFO Camera camera.cpp:1202 configuring streams: (0) 2028x1080-SBGGR16
+[2:33:51.833764986] [194069]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-BYR2
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_structure_set: assertion 'structure != NULL' failed
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_structure_set: assertion 'structure != NULL' failed
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_caps_get_structure: assertion 'index < GST_CAPS_LEN (caps)' failed
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_structure_set: assertion 'structure != NULL' failed
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_event_new_caps: assertion 'gst_caps_is_fixed (caps)' failed
+
+(python:194032): GStreamer-CRITICAL **: 01:19:14.787: gst_pad_push_event: assertion 'GST_IS_EVENT (event)' failed
+[ WARN:0@0.180] global ./modules/videoio/src/cap_gstreamer.cpp (2401) handleMessage OpenCV | GStreamer warning: Embedded video playback halted; module libcamerasrc0 reported: Internal data stream error.
+[ WARN:0@0.181] global ./modules/videoio/src/cap_gstreamer.cpp (1356) open OpenCV | GStreamer warning: unable to start pipeline
+[ WARN:0@0.182] global ./modules/videoio/src/cap_gstreamer.cpp (862) isPipelinePlaying OpenCV | GStreamer warning: GStreamer: pipeline have not been created
+Error: Could not open the camera.
+leuleb@rasp:~/Documents $ 
