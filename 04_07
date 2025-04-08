@@ -1,0 +1,184 @@
+# Monkey patch for Python 3.12:
+import collections
+import collections.abc
+if not hasattr(collections, 'MutableMapping'):
+    collections.MutableMapping = collections.abc.MutableMapping
+
+import cv2
+import cv2.aruco as aruco
+import math
+import numpy as np
+from dronekit import connect, VehicleMode
+import time
+
+# ---- Configuration Constants ----
+MARKER_REAL_SIZE = 0.05       # Actual marker width in meters (e.g., 5 cm)
+FOCAL_LENGTH = 800            # Estimated focal length in pixels (adjust via calibration)
+GPS_TARGET_MARKER_ID = 23     # Marker ID that triggers GPS capture after centering
+SERIAL_BAUD = 57600           # Baud rate for Pixhawk connection
+CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']  # List of possible ports
+
+# Additional GPS stability check settings:
+REQUIRED_FIX_TYPE = 3         # For example, fix_type 3 usually indicates a proper 3D fix
+STABILITY_WAIT_TIME = 10      # Maximum seconds to wait for a stable GPS fix
+
+def estimate_distance(pixel_width):
+    """
+    Estimate the distance from the camera to the marker.
+    Formula: distance = (marker_real_width * focal_length) / pixel_width
+    """
+    if pixel_width == 0:
+        return None
+    return (MARKER_REAL_SIZE * FOCAL_LENGTH) / pixel_width
+
+def get_frame(cap):
+    ret, frame = cap.read()
+    if not ret:
+        print("Error: Unable to capture frame from camera.")
+        return None
+    return frame
+
+def get_vehicle_gps(vehicle):
+    """
+    Retrieve the GPS coordinates from the connected Pixhawk using DroneKit.
+    Returns a tuple (latitude, longitude) if available.
+    """
+    location = vehicle.location.global_frame
+    if location.lat is not None and location.lon is not None:
+        return location.lat, location.lon
+    return None
+
+def try_connect(connection_string, baud=SERIAL_BAUD):
+    try:
+        print(f"Trying connection string: {connection_string}")
+        vehicle = connect(connection_string, baud=baud, wait_ready=False, heartbeat_timeout=60)
+        print("Connected successfully using:", connection_string)
+        return vehicle
+    except Exception as e:
+        print(f"Error connecting using {connection_string}: {e}")
+        return None
+
+def connect_pixhawk():
+    vehicle = None
+    for cs in CONNECTION_STRINGS:
+        vehicle = try_connect(cs)
+        if vehicle is not None:
+            break
+    if vehicle is None:
+        print("Failed to connect to Pixhawk on any provided port.")
+    return vehicle
+
+def wait_for_stable_gps(vehicle, timeout=STABILITY_WAIT_TIME):
+    """
+    Wait up to 'timeout' seconds for the GPS fix to be stable. In this example,
+    we require the fix_type to be at least REQUIRED_FIX_TYPE.
+    Returns True if a stable fix is obtained.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        fix_type = getattr(vehicle.gps_0, 'fix_type', 0)
+        if fix_type >= REQUIRED_FIX_TYPE:
+            return True
+        time.sleep(1)
+    return False
+
+def main():
+    # Connect to the Pixhawk autopilot.
+    print("Connecting to Pixhawk autopilot...")
+    vehicle = connect_pixhawk()
+    if vehicle is None:
+        return
+
+    # Optional: Allow a brief delay for initial telemetry.
+    time.sleep(2)
+
+    # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi).
+    cap = cv2.VideoCapture(
+        "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
+        "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink",
+        cv2.CAP_GSTREAMER
+    )
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        vehicle.close()
+        return
+
+    # Initialize ArUco marker detection.
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    parameters = aruco.DetectorParameters_create()
+
+    print("Starting marker detection with centering guidance.")
+    print("Adjust position until the marker is 'Centered' (within threshold) for GPS capture.")
+    
+    while True:
+        frame = get_frame(cap)
+        if frame is None:
+            break
+
+        # Determine frame dimensions and compute the center.
+        frame_height, frame_width = frame.shape[:2]
+        frame_center = (frame_width // 2, frame_height // 2)
+        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw the frame center as a blue dot.
+
+        # Convert frame to grayscale for marker detection.
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+        if ids is not None:
+            for i, marker_corners in enumerate(corners):
+                aruco.drawDetectedMarkers(frame, corners, ids)
+                pts = marker_corners[0]
+                marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
+                cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
+
+                # Compute the offset between marker center and frame center.
+                dx = marker_center[0] - frame_center[0]
+                dy = marker_center[1] - frame_center[1]
+                threshold = 20  # Pixel threshold for centering.
+                guidance = []
+                if dx > threshold:
+                    guidance.append("Move Left")
+                elif dx < -threshold:
+                    guidance.append("Move Right")
+                if dy > threshold:
+                    guidance.append("Move Up")
+                elif dy < -threshold:
+                    guidance.append("Move Down")
+                guidance_text = "Centered" if not guidance else ", ".join(guidance)
+                
+                cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+                # Check if the detected marker is our trigger marker and is centered.
+                if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
+                    print("Marker is centered. Waiting for a stable GPS fix...")
+                    # Instead of a fixed delay, wait until a stable GPS fix is detected.
+                    if wait_for_stable_gps(vehicle):
+                        gps_location = get_vehicle_gps(vehicle)
+                        if gps_location is not None:
+                            lat, lon = gps_location
+                            print(f"GPS Location captured: Latitude: {lat:.6f}, Longitude: {lon:.6f}")
+                        else:
+                            print("GPS location not available even after stabilization.")
+                    else:
+                        print("Stable GPS fix not achieved within the expected time.")
+
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    vehicle.close()
+                    return
+
+                # Process only the first detected marker.
+                break
+
+        cv2.imshow("ArUco Detection", frame)
+        # Press "q" to quit manually.
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+    vehicle.close()
+
+if __name__ == '__main__':
+    main()
