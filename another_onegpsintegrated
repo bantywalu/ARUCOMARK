@@ -1,4 +1,4 @@
-# Monkey patch for Python 3.12 where collections.MutableMapping was moved to collections.abc.MutableMapping
+
 import collections
 import collections.abc
 if not hasattr(collections, 'MutableMapping'):
