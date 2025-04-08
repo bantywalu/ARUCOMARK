@@ -1,0 +1,84 @@
+import cv2
+import cv2.aruco as aruco
+import numpy as np
+
+def main():
+    # Option 1: Native resolution pipeline based on sensor output.
+    # You can alternatively try a fixed resolution (e.g., 1280x720) without videoscale.
+    pipeline = (
+        'libcamerasrc ! video/x-raw,width=2028,height=1080,framerate=30/1 ! '
+        'videoconvert ! video/x-raw,format=BGR ! appsink'
+    )
+    
+    cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+    if not cap.isOpened():
+        print("Error: Could not open the camera.")
+        return
+
+    # Use the predefined ArUco dictionary and detection parameters.
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    parameters = aruco.DetectorParameters()
+
+    print("Starting ArUco detection with guidance. Press 'q' to quit.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Error: Unable to capture frame.")
+            break
+
+        # Optionally, if you require a lower resolution, resize in code:
+        # frame = cv2.resize(frame, (1280, 720))
+
+        # Compute the frame's center and draw a reference dot (blue).
+        frame_height, frame_width = frame.shape[:2]
+        frame_center = (frame_width // 2, frame_height // 2)
+        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)
+
+        # Convert frame to grayscale for ArUco marker detection.
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+        if ids is not None:
+            # Process only the first detected marker for guidance.
+            for i, marker_corners in enumerate(corners):
+                # Draw detected marker boundaries and display the marker ID.
+                aruco.drawDetectedMarkers(frame, corners, ids)
+
+                # Calculate the center (centroid) of the marker.
+                pts = marker_corners[0]
+                marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
+                cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
+
+                # Determine offset between the marker center and frame center.
+                dx = marker_center[0] - frame_center[0]
+                dy = marker_center[1] - frame_center[1]
+                threshold = 20  # Pixel threshold to consider "centered"
+                guidance = []
+
+                # Guidance instructions based on the offset (adjust as needed).
+                if dx > threshold:
+                    guidance.append("Move Left")
+                elif dx < -threshold:
+                    guidance.append("Move Right")
+                if dy > threshold:
+                    guidance.append("Move Up")
+                elif dy < -threshold:
+                    guidance.append("Move Down")
+
+                guidance_text = "Centered" if not guidance else ", ".join(guidance)
+                cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                print(f"Marker ID {ids[i][0]} | Guidance: {guidance_text}")
+                # Process only one marker, so break out of the loop.
+                break
+
+        cv2.imshow("ArUco Detection", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == '__main__':
+    main()
