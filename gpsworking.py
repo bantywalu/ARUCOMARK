@@ -10,30 +10,32 @@ import time
 def main():
     print("Connecting to Pixhawk autopilot...")
     try:
-        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=True)  # adjust if needed
+        # Adjust the connection string and baud rate as needed
+        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=True)
     except Exception as e:
         print("Error connecting to Pixhawk:", e)
         return
 
-    print("Connected. Waiting for GPS lock...")
+    print("Connected. Starting continuous GPS status check...")
 
-    # Wait for a valid GPS fix
-    while True:
-        # vehicle.location.global_frame should provide lat and lon once a fix is available.
-        location = vehicle.location.global_frame
-        # Some Pixhawk setups also provide a fix type via vehicle.gps_0.fix_type (2 = 2D fix, 3 = 3D fix)
-        fix_type = getattr(vehicle.gps_0, 'fix_type', 0)
-        
-        # Check if GPS fix is valid (using either method)
-        if location.lat is not None and location.lon is not None and fix_type > 1:
-            print("GPS Lock achieved!")
-            print(f"Latitude: {location.lat:.6f}, Longitude: {location.lon:.6f}")
-            break
-        else:
-            print("Waiting for GPS fix...", end="\r")
-        time.sleep(1)
+    try:
+        while True:
+            # Retrieve GPS fix type (usually, 2: 2D fix, 3: 3D fix)
+            fix_type = getattr(vehicle.gps_0, 'fix_type', 0)
+            # Get the current global location
+            location = vehicle.location.global_frame
 
-    vehicle.close()
+            if fix_type > 1 and location.lat is not None and location.lon is not None:
+                print(f"GPS Lock: Latitude: {location.lat:.6f}, Longitude: {location.lon:.6f}")
+            else:
+                print("No valid GPS fix.")
+            
+            # Wait 5 seconds before rechecking
+            time.sleep(5)
+    except KeyboardInterrupt:
+        print("\nStopping GPS check.")
+    finally:
+        vehicle.close()
 
 if __name__ == '__main__':
     main()
