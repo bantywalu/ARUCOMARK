@@ -1,0 +1,198 @@
+# Monkey patch for Python 3.12:
+import collections
+import collections.abc
+if not hasattr(collections, 'MutableMapping'):
+    collections.MutableMapping = collections.abc.MutableMapping
+
+import time
+import cv2
+import cv2.aruco as aruco
+import numpy as np
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+from pymavlink import mavutil
+
+# ----- CONFIGURATION CONSTANTS -----
+TARGET_ALTITUDE = 3.0         # Altitude (meters) to start with (or as a reference)
+ASCEND_VELOCITY  = -0.3       # In NED: negative Z = upward (m/s)
+DESCEND_VELOCITY =  0.3       # In NED: positive Z = downward (m/s)
+COMMAND_DURATION = 1          # seconds to send each velocity command
+GPS_TARGET_MARKER_ID = 23     # Marker ID we use as trigger (adjust as needed)
+THRESHOLD = 20                # Pixel threshold for centering the marker
+SERIAL_BAUD = 57600           # Baud rate for Pixhawk connection
+CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']
+
+# ----- Helper Functions -----
+def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z, duration):
+    """
+    Send command to drone to move with specified velocities (m/s) in local NED frame.
+    In NED, velocity_z > 0 means moving down and velocity_z < 0 means moving up.
+    """
+    msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0,  # time_boot_ms (not used)
+        0, 0,  # target system, target component
+        mavutil.mavlink.MAV_FRAME_LOCAL_NED,  # frame
+        0b0000111111000111,  # type_mask (only velocity enabled)
+        0, 0, 0,  # x, y, z positions (not used)
+        velocity_x, velocity_y, velocity_z,  # m/s
+        0, 0, 0,  # accelerations (not used)
+        0, 0  # yaw, yaw_rate (not used)
+    )
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        vehicle.send_mavlink(msg)
+        time.sleep(0.1)
+
+def arm_and_takeoff(vehicle, target_altitude):
+    """
+    Arms vehicle and fly to a target altitude.
+    """
+    print("Arming vehicle...")
+    while not vehicle.is_armable:
+        print(" Waiting for vehicle to become armable...")
+        time.sleep(1)
+        
+    vehicle.mode = VehicleMode("GUIDED")
+    vehicle.armed = True
+
+    while not vehicle.armed:
+        print(" Waiting for arming...")
+        time.sleep(1)
+    
+    print("Taking off!")
+    vehicle.simple_takeoff(target_altitude)
+    
+    # Wait until the vehicle reaches a safe height before proceeding.
+    while True:
+        current_alt = vehicle.location.global_relative_frame.alt
+        print(f" Altitude: {current_alt:.1f} m")
+        if current_alt >= target_altitude * 0.95:
+            print("Reached target altitude")
+            break
+        time.sleep(1)
+
+def try_connect(connection_string, baud=SERIAL_BAUD):
+    try:
+        print(f"Trying connection string: {connection_string}")
+        vehicle = connect(connection_string, baud=baud, wait_ready=False, heartbeat_timeout=60)
+        print("Connected successfully using:", connection_string)
+        return vehicle
+    except Exception as e:
+        print(f"Error connecting using {connection_string}: {e}")
+        return None
+
+def connect_pixhawk():
+    vehicle = None
+    for cs in CONNECTION_STRINGS:
+        vehicle = try_connect(cs)
+        if vehicle is not None:
+            break
+    if vehicle is None:
+        print("Failed to connect to Pixhawk on any provided port.")
+    return vehicle
+
+# ----- MAIN CODE -----
+def main():
+    # Connect to the Pixhawk autopilot.
+    print("Connecting to Pixhawk autopilot...")
+    vehicle = connect_pixhawk()
+    if vehicle is None:
+        return
+
+    # Give a short delay to allow telemetry to start.
+    time.sleep(2)
+
+    # Arm the vehicle and take off to the target altitude.
+    arm_and_takeoff(vehicle, TARGET_ALTITUDE)
+
+    # Open the camera using a GStreamer pipeline (suitable for Raspberry Pi).
+    cap = cv2.VideoCapture(
+        "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
+        "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink",
+        cv2.CAP_GSTREAMER
+    )
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        vehicle.close()
+        return
+
+    # Initialize ArUco marker detection.
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    parameters = aruco.DetectorParameters_create()
+
+    print("Starting marker detection.")
+    print("Drone will keep ascending until the target marker is detected; upon detection, it will start descending.")
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Failed to read frame")
+                continue
+
+            # Determine the frame center.
+            frame_height, frame_width = frame.shape[:2]
+            frame_center = (frame_width // 2, frame_height // 2)
+            cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Blue dot
+
+            # Convert frame to grayscale for marker detection.
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+            marker_found = False
+            if ids is not None:
+                for i, marker_corners in enumerate(corners):
+                    # Draw detected marker boundaries and compute centroid.
+                    aruco.drawDetectedMarkers(frame, corners, ids)
+                    pts = marker_corners[0]
+                    marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
+                    cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)  # Red dot
+
+                    # Calculate offset from frame center.
+                    dx = marker_center[0] - frame_center[0]
+                    dy = marker_center[1] - frame_center[1]
+                    guidance = []
+                    if dx > THRESHOLD:
+                        guidance.append("Move Left")
+                    elif dx < -THRESHOLD:
+                        guidance.append("Move Right")
+                    if dy > THRESHOLD:
+                        guidance.append("Move Up")
+                    elif dy < -THRESHOLD:
+                        guidance.append("Move Down")
+                    
+                    guidance_text = "Centered" if not guidance else ", ".join(guidance)
+                    cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    
+                    # Check if this marker is our trigger marker and is centered.
+                    if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
+                        marker_found = True
+                    break  # Process only the first detected marker.
+
+            # Display the camera feed (for debugging / monitoring).
+            cv2.imshow("ArUco Detection", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+            # Control behavior based on marker detection.
+            if marker_found:
+                print("Marker detected and centered. Descending...")
+                # Command the drone to descend gradually.
+                send_ned_velocity(vehicle, 0, 0, DESCEND_VELOCITY, COMMAND_DURATION)
+            else:
+                print("No marker detected. Ascending...")
+                # Command the drone to ascend.
+                send_ned_velocity(vehicle, 0, 0, ASCEND_VELOCITY, COMMAND_DURATION)
+    except KeyboardInterrupt:
+        print("User interrupted. Stopping loop.")
+
+    # Cleanup: Land the drone, release camera and close connections.
+    print("Landing the drone...")
+    vehicle.mode = VehicleMode("LAND")
+    time.sleep(10)
+    cap.release()
+    cv2.destroyAllWindows()
+    vehicle.close()
+
+if __name__ == '__main__':
+    main()
