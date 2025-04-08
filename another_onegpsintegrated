@@ -5,9 +5,9 @@ import numpy as np
 from dronekit import connect, VehicleMode  # DroneKit for Pixhawk telemetry
 
 # ---- Configuration Constants ----
-MARKER_REAL_SIZE = 0.05  # Actual marker width in meters (e.g., 5 cm)
+MARKER_REAL_SIZE = 0.05  # Marker width in meters (e.g., 5 cm)
 FOCAL_LENGTH = 800       # Estimated focal length in pixels (adjust via calibration)
-GPS_TARGET_MARKER_ID = 23  # Marker ID that triggers GPS retrieval
+GPS_TARGET_MARKER_ID = 23  # Marker ID that triggers GPS capture
 
 def estimate_distance(pixel_width):
     """
@@ -37,10 +37,10 @@ def get_vehicle_gps(vehicle):
 
 def main():
     # Connect to the Pixhawk autopilot using DroneKit.
-    # Adjust the connection string to match your setup (e.g., '/dev/ttyAMA0', '/dev/serial0', or a UDP address).
+    # Adjust the connection string as needed for your hardware.
     try:
         print("Connecting to Pixhawk autopilot...")
-        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=True)  # adjust port/baud rate as needed
+        vehicle = connect('/dev/ttyAMA0', baud=57600, wait_ready=True)
     except Exception as e:
         print("Error connecting to Pixhawk:", e)
         return
@@ -53,13 +53,14 @@ def main():
     )
     if not cap.isOpened():
         print("Error: Could not open camera.")
+        vehicle.close()
         return
 
     # Initialize the predefined ArUco dictionary and detector parameters
     aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
     parameters = aruco.DetectorParameters_create()
 
-    print("Starting ArUco marker detection with guidance, distance estimation, and Pixhawk GPS trigger. Press 'q' to exit.")
+    print("Starting ArUco marker detection with GPS capture trigger. Press 'q' to exit.")
 
     while True:
         frame = get_frame(cap)
@@ -69,23 +70,23 @@ def main():
         # Get frame dimensions and compute the frame center
         frame_height, frame_width = frame.shape[:2]
         frame_center = (frame_width // 2, frame_height // 2)
-        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw the center as a blue dot
+        cv2.circle(frame, frame_center, 5, (255, 0, 0), -1)  # Draw the frame center as a blue dot
 
         # Convert frame to grayscale for marker detection
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        corners, ids, rejected = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
 
         if ids is not None:
-            # Process detected markers (this example processes only the first detected marker)
+            # Process the detected markers; here processing only the first detected marker.
             for i, marker_corners in enumerate(corners):
-                # Draw detected marker boundaries and IDs
+                # Draw the detected marker boundaries and IDs
                 aruco.drawDetectedMarkers(frame, corners, ids)
                 pts = marker_corners[0]
-                # Compute the marker center (centroid)
+                # Compute the centroid of the marker
                 marker_center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
                 cv2.circle(frame, marker_center, 5, (0, 0, 255), -1)
 
-                # Compute guidance based on deviation from frame center
+                # Compute guidance based on deviation from the frame center
                 dx = marker_center[0] - frame_center[0]
                 dy = marker_center[1] - frame_center[1]
                 threshold = 20  # pixel threshold for considering the marker centered
@@ -102,7 +103,7 @@ def main():
                 cv2.putText(frame, guidance_text, (marker_center[0] - 50, marker_center[1] - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
-                # Estimate distance using the marker's pixel width (top edge distance)
+                # Estimate distance using the marker's pixel width (from the top edge)
                 pt1 = pts[0]  # top-left corner
                 pt2 = pts[1]  # top-right corner
                 pixel_width = math.hypot(pt2[0] - pt1[0], pt2[1] - pt1[1])
@@ -111,20 +112,24 @@ def main():
                     distance_text = f"{distance:.2f} m"
                     cv2.putText(frame, distance_text, (marker_center[0] - 50, marker_center[1] + 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
-                    print(f"Detected marker ID {ids[i][0]} estimated distance: {distance:.2f} meters")
 
-                # Check if the detected marker triggers the GPS retrieval from the Pixhawk
-                if ids[i][0] == GPS_TARGET_MARKER_ID:
+                # Check if the detected marker is the designated GPS trigger marker and is centered.
+                if ids[i][0] == GPS_TARGET_MARKER_ID and guidance_text == "Centered":
                     gps_location = get_vehicle_gps(vehicle)
                     if gps_location is not None:
                         lat, lon = gps_location
-                        gps_text = f"Lat: {lat:.6f}, Lon: {lon:.6f}"
-                        cv2.putText(frame, gps_text, (marker_center[0] - 100, marker_center[1] + 60),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                        print("GPS Location:", gps_text)
+                        # Print the GPS location to the terminal.
+                        print(f"GPS Location captured: Lat: {lat:.6f}, Lon: {lon:.6f}")
                     else:
                         print("GPS location not available")
-                # Process only the first detected marker for this example
+                    
+                    # Stop processing: release resources and exit the function.
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    vehicle.close()
+                    return
+
+                # Process only the first detected marker for this example.
                 break
 
         cv2.imshow("ArUco Detection", frame)
@@ -133,7 +138,7 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
-    vehicle.close()  # Close the vehicle connection
+    vehicle.close()
 
 if __name__ == '__main__':
     main()
