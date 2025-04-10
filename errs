@@ -1,76 +1,32 @@
-leuleb@rasp:~ $ cd Documents
-leuleb@rasp:~/Documents $ pytho3 get_integratedcapture.py
-bash: pytho3: command not found
-leuleb@rasp:~/Documents $ python3 get_integratedcapture.py
-python3: can't open file '/home/leuleb/Documents/get_integratedcapture.py': [Errno 2] No such file or directory
-leuleb@rasp:~/Documents $ python3 gps_integratedcapture.py
-Connecting to Pixhawk autopilot...
-Trying connection string: /dev/ttyAMA0
-Connected successfully using: /dev/ttyAMA0
-[0:35:04.914110764] [47711]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
-[0:35:04.921181659] [47793]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
-[0:35:04.933042878] [47793]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
-[0:35:04.935149930] [47796]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
-[0:35:04.935311818] [47793]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
-[ WARN:0@3.453] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
-[ WARN:0@3.453] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
-Starting marker detection with centering guidance.
-Adjust position until the marker is 'Centered' (within threshold) for GPS capture.
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-CRITICAL:autopilot:GPS Glitch or Compass error
-CRITICAL:autopilot:PreArm: GPS glitching
-CRITICAL:autopilot:Glitch cleared
-CRITICAL:autopilot:PreArm: GPS glitching
-CRITICAL:autopilot:GPS Glitch or Compass error
-CRITICAL:autopilot:EKF variance
-CRITICAL:autopilot:PreArm: GPS glitching
-^CTraceback (most recent call last):
-  File "/home/leuleb/Documents/gps_integratedcapture.py", line 163, in <module>
-    main()
-  File "/home/leuleb/Documents/gps_integratedcapture.py", line 98, in main
-    frame = get_frame(cap)
-            ^^^^^^^^^^^^^^
-  File "/home/leuleb/Documents/gps_integratedcapture.py", line 33, in get_frame
-    ret, frame = cap.read()
-                 ^^^^^^^^^^
-KeyboardInterrupt
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/homedrone.py
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/serial/serialposix.py", line 322, in open
+    self.fd = os.open(self.portstr, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/dev/serial0'
 
-leuleb@rasp:~/Documents $ python3 gps_integratedcapture.py
-Connecting to Pixhawk autopilot...
-Trying connection string: /dev/ttyAMA0
-Connected successfully using: /dev/ttyAMA0
-[0:38:12.791765552] [51642]  INFO Camera camera_manager.cpp:327 libcamera v0.4.0+78-818d45eb-dirty (2025-02-14T02:03:07GMT)
-[0:38:12.798888245] [51731]  INFO RPI pisp.cpp:720 libpisp version v1.1.0 e7974a156008 27-01-2025 (21:50:51)
-[0:38:12.810306359] [51731]  INFO RPI pisp.cpp:1180 Registered camera /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_C0
-[0:38:12.812400708] [51734]  INFO Camera camera.cpp:1202 configuring streams: (0) 1920x1080-NV12
-[0:38:12.812512264] [51731]  INFO RPI pisp.cpp:1485 Sensor: /base/axi/pcie@120000/rp1/i2c@88000/imx477@1a - Selected sensor format: 2028x1080-SBGGR12_1X12 - Selected CFE format: 2028x1080-PC1B
-[ WARN:0@3.856] global ./modules/videoio/src/cap_gstreamer.cpp (1374) open OpenCV | GStreamer warning: unable to query duration of stream
-[ WARN:0@3.856] global ./modules/videoio/src/cap_gstreamer.cpp (1405) open OpenCV | GStreamer warning: Cannot query video position: status=0, value=-1, duration=-1
-Starting marker detection with centering guidance.
-Adjust position until the marker is 'Centered' (within threshold) for GPS capture.
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-libpng warning: iCCP: known incorrect sRGB profile
-CRITICAL:autopilot:GPS Glitch or Compass error
-CRITICAL:autopilot:PreArm: GPS glitching
-CRITICAL:autopilot:Glitch cleared
-CRITICAL:autopilot:PreArm: EKF velocity variance
-CRITICAL:autopilot:GPS Glitch or Compass error
-CRITICAL:autopilot:PreArm: GPS and AHRS differ by 100.9m
-CRITICAL:autopilot:EKF variance
-CRITICAL:autopilot:PreArm: GPS glitching
-CRITICAL:autopilot:PreArm: GPS glitching
-CRITICAL:autopilot:PreArm: GPS glitching
-^CTraceback (most recent call last):
-  File "/home/leuleb/Documents/gps_integratedcapture.py", line 163, in <module>
-    main()
-  File "/home/leuleb/Documents/gps_integratedcapture.py", line 155, in main
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-       ^^^^^^^^^^^^^^
-KeyboardInterrupt
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/homedrone.py", line 11, in <module>
+    vehicle = connect('/dev/serial0', baud=57600, wait_ready=False, heartbeat_timeout=60)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/leuleb/.local/lib/python3.11/site-packages/dronekit/__init__.py", line 3158, in connect
+    handler = MAVConnection(ip, baud=baud, source_system=source_system, source_component=source_component, use_native=use_native)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/leuleb/.local/lib/python3.11/site-packages/dronekit/mavlink.py", line 130, in __init__
+    self.master = mavutil.mavlink_connection(ip, baud=baud, source_system=source_system, source_component=source_component)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/leuleb/.local/lib/python3.11/site-packages/pymavlink/mavutil.py", line 1949, in mavlink_connection
+    return mavserial(device,
+           ^^^^^^^^^^^^^^^^^
+  File "/home/leuleb/.local/lib/python3.11/site-packages/pymavlink/mavutil.py", line 972, in __init__
+    raise e
+  File "/home/leuleb/.local/lib/python3.11/site-packages/pymavlink/mavutil.py", line 968, in __init__
+    self.port = serial.Serial(self.device, 1200, timeout=0,
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/serial/serialutil.py", line 244, in __init__
+    self.open()
+  File "/usr/lib/python3/dist-packages/serial/serialposix.py", line 325, in open
+    raise SerialException(msg.errno, "could not open port {}: {}".format(self._port, msg))
+serial.serialutil.SerialException: [Errno 2] could not open port /dev/serial0: [Errno 2] No such file or directory: '/dev/serial0'
