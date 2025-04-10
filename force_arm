@@ -1,0 +1,90 @@
+# --- Python 3.12 Monkey Patch ---
+import collections
+import collections.abc
+if not hasattr(collections, 'MutableMapping'):
+    collections.MutableMapping = collections.abc.MutableMapping
+
+import time
+import threading
+import cv2
+import cv2.aruco as aruco
+from dronekit import connect, VehicleMode
+
+# ----- Force Keep Armed -----
+def force_keep_armed(vehicle):
+    def monitor():
+        while True:
+            if not vehicle.armed:
+                print("⚠️ Vehicle disarmed unexpectedly! Re-arming...")
+                vehicle.armed = True
+            time.sleep(1)
+    t = threading.Thread(target=monitor, daemon=True)
+    t.start()
+
+# ----- Connect to Vehicle -----
+vehicle = connect('/dev/ttyAMA0', wait_ready=True, baud=57600)
+
+# Set to GUIDED mode and arm
+vehicle.mode = VehicleMode("GUIDED")
+while not vehicle.mode.name == 'GUIDED':
+    print(" Waiting for GUIDED mode...")
+    time.sleep(1)
+
+vehicle.armed = True
+while not vehicle.armed:
+    print(" Waiting for arming...")
+    time.sleep(1)
+print("✅ Vehicle armed!")
+
+# Start background arm-monitoring thread
+force_keep_armed(vehicle)
+
+# ----- Setup Camera -----
+cap = cv2.VideoCapture(0)  # Or GStreamer pipeline for Pi camera
+if not cap.isOpened():
+    print("❌ Failed to open camera.")
+    exit()
+
+# ----- Setup ArUco Detection -----
+aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+aruco_params = aruco.DetectorParameters_create()
+
+# ----- Begin Ascent and Marker Detection -----
+search_start = time.time()
+marker_found = False
+
+print("🚁 Beginning ascent and marker search...")
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        continue
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=aruco_params)
+
+    if ids is not None and len(ids) > 0:
+        marker_found = True
+        print("✅ ArUco marker detected!")
+        loc = vehicle.location.global_relative_frame
+        print(f"📍 Location -> lat: {loc.lat}, lon: {loc.lon}, alt: {loc.alt:.2f} m")
+        break
+
+    if time.time() - search_start > 90:
+        print("⏱️ Marker not found within 90 seconds. Initiating landing...")
+        break
+
+    # 🛫 Simulate ascent (replace with real velocity command if needed)
+    print("Ascending...")
+    time.sleep(1)
+
+# ----- Land the Drone -----
+print("🛬 Landing...")
+vehicle.mode = VehicleMode("LAND")
+while not vehicle.mode.name == 'LAND':
+    print(" Waiting for LAND mode...")
+    time.sleep(1)
+
+# ----- Cleanup -----
+cap.release()
+vehicle.close()
+print("🔻 Drone landed and script complete.")
