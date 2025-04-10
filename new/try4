@@ -1,0 +1,168 @@
+# --- Python 3.12 Monkey Patch ---
+import collections
+import collections.abc
+if not hasattr(collections, 'MutableMapping'):
+    collections.MutableMapping = collections.abc.MutableMapping
+
+import time
+import threading
+import cv2
+import cv2.aruco as aruco
+import numpy as np
+from dronekit import connect, VehicleMode
+from pymavlink import mavutil
+
+# ----- CONFIGURATION CONSTANTS -----
+TAKEOFF_ALTITUDE   = 1.0
+ASCEND_VELOCITY    = -0.3  # In NED frame, negative Z is upward.
+COMMAND_INTERVAL   = 0.1   # Seconds between each velocity command.
+NO_MARKER_TIMEOUT  = 90    # Seconds timeout
+SERIAL_BAUD        = 57600
+CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']
+
+# --- Keep Vehicle Armed ---
+def force_keep_armed(vehicle):
+    def monitor():
+        while True:
+            if not vehicle.armed:
+                print("⚠️ Vehicle disarmed unexpectedly! Re-arming...")
+                vehicle.armed = True
+            time.sleep(1)
+    threading.Thread(target=monitor, daemon=True).start()
+
+# ----- Helper Functions -----
+def send_ned_velocity(vehicle, velocity_x, velocity_y, velocity_z):
+    """Send a single NED velocity command."""
+    msg = vehicle.message_factory.set_position_target_local_ned_encode(
+        0, 0, 0,
+        mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+        0b0000111111000111,   # Only velocity components are enabled
+        0, 0, 0,              # Position (not used)
+        velocity_x, velocity_y, velocity_z,
+        0, 0, 0,              # Accelerations (not used)
+        0, 0                  # Yaw, yaw_rate (not used)
+    )
+    vehicle.send_mavlink(msg)
+
+def try_connect(connection_string, baud=SERIAL_BAUD):
+    try:
+        vehicle = connect(connection_string, baud=baud, wait_ready=False, heartbeat_timeout=60)
+        print(f"Successfully connected; vehicle armed state: {vehicle.armed}")
+        return vehicle
+    except Exception as e:
+        print(f"Error connecting on {connection_string}: {e}")
+        return None
+
+def connect_pixhawk():
+    for cs in CONNECTION_STRINGS:
+        vehicle = try_connect(cs)
+        if vehicle:
+            print(f"Connected to Pixhawk using port: {cs}")
+            return vehicle
+    raise Exception("Failed to connect to Pixhawk on any provided port. Please verify wiring and port names.")
+
+def arm_and_takeoff(vehicle, target_altitude):
+    print("Waiting for vehicle to become armable...")
+    while not vehicle.is_armable:
+        print(" Waiting for vehicle to initialize...")
+        time.sleep(1)
+    vehicle.mode = VehicleMode("GUIDED")
+    vehicle.armed = True
+    print("Arming vehicle...")
+    while not vehicle.armed:
+        print(" Waiting for arming...")
+        time.sleep(1)
+    print("Vehicle armed. Initiating takeoff!")
+    vehicle.simple_takeoff(target_altitude)
+    while True:
+        current_alt = vehicle.location.global_relative_frame.alt
+        print(f" Current Altitude: {current_alt:.2f} m")
+        if current_alt >= target_altitude * 0.95:
+            print("Reached target altitude.")
+            break
+        time.sleep(1)
+
+def velocity_thread(vehicle, stop_event):
+    """Continuously sends ascending velocity commands until signaled to stop."""
+    while not stop_event.is_set():
+        send_ned_velocity(vehicle, 0, 0, ASCEND_VELOCITY)
+        time.sleep(COMMAND_INTERVAL)
+
+def main():
+    # Connect to the vehicle and prepare for flight.
+    vehicle = connect_pixhawk()
+    force_keep_armed(vehicle)
+    arm_and_takeoff(vehicle, TAKEOFF_ALTITUDE)
+
+    # Prepare the camera.
+    cv2.namedWindow("ArUco Detection", cv2.WINDOW_NORMAL)
+    cap = cv2.VideoCapture(
+        "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
+        "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink",
+        cv2.CAP_GSTREAMER
+    )
+    if not cap.isOpened():
+        print("Error: Could not open camera.")
+        vehicle.close()
+        return
+
+    # Initialize ArUco detection parameters.
+    # (Make sure the dictionary matches your printed marker type.)
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    parameters = aruco.DetectorParameters_create()
+
+    # Start a background thread to send velocity commands.
+    stop_velocity_event = threading.Event()
+    v_thread = threading.Thread(target=velocity_thread, args=(vehicle, stop_velocity_event))
+    v_thread.start()
+
+    print("Starting marker detection and continuous ascent...")
+    detection_start_time = time.time()
+    marker_detected = False
+
+    # Run the detection loop in the main thread.
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to capture frame from camera.")
+            time.sleep(0.05)
+            continue
+
+        # Convert frame to grayscale and detect markers.
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, rejected = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
+
+        # If markers are detected, print them and break the loop.
+        if ids is not None and len(ids) > 0:
+            print("Detected marker IDs:", ids.flatten())
+            marker_detected = True
+            break
+
+        # Display the frame for visual feedback.
+        cv2.imshow("ArUco Detection", frame)
+        # Exit if the user presses 'q'.
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+        # Check for timeout.
+        if (time.time() - detection_start_time) > NO_MARKER_TIMEOUT:
+            print("No marker detected within timeout. Stopping ascent.")
+            break
+
+    # Signal the velocity thread to stop.
+    stop_velocity_event.set()
+    v_thread.join()
+
+    # Command landing.
+    print("Commanding landing...")
+    vehicle.mode = VehicleMode("LAND")
+    time.sleep(10)
+
+    # Clean up.
+    cap.release()
+    cv2.destroyAllWindows()
+    vehicle.close()
+    print("Shutdown complete.")
+
+if __name__ == '__main__':
+    main()
