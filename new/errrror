@@ -1,0 +1,10 @@
+leuleb@rasp:~/Documents $ /usr/bin/python /home/leuleb/Documents/this_isit.py
+Traceback (most recent call last):
+  File "/home/leuleb/Documents/this_isit.py", line 116, in <module>
+    main()
+  File "/home/leuleb/Documents/this_isit.py", line 58, in main
+    vehicle = connect_pixhawk()
+              ^^^^^^^^^^^^^^^^^
+  File "/home/leuleb/Documents/this_isit.py", line 39, in connect_pixhawk
+    raise Exception("Failed to connect to Pixhawk.")
+Exception: Failed to connect to Pixhawk.
