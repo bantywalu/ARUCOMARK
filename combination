@@ -1,0 +1,71 @@
+import time
+from dronekit import VehicleMode
+
+# ... [Assume vehicle is already connected, armed, and in GUIDED mode] ...
+
+# Start ascending (e.g., by sending velocity or throttle commands in a loop)
+search_start = time.time()
+marker_found = False
+if compass_error_flag:
+    # Switch to a mode that allows manual control
+    vehicle.mode = VehicleMode("ALT_HOLD")
+    # (Ensure you have a recent home GPS coordinate)
+    home = home_location  # assume this was recorded at takeoff
+    
+    # Loop to attempt manual homing
+    while True:
+        current = vehicle.location.global_frame
+        dist_to_home = get_distance_meters(current, home)
+        if dist_to_home < 5:  # within 5m of home
+            print("Reached home vicinity, landing now.")
+            # cut throttle to land
+            vehicle.channels.overrides['3'] = 1200  # descend
+            break
+        # Determine direction to move (this is simplified logic)
+        bearing_to_home = calculate_bearing(current, home)
+        # Yaw towards the target bearing (this is tricky without compass, skip or do small yaw adjustments)
+        vehicle.channels.overrides['4'] = 1500  # (for simplicity, hold current yaw; or adjust slightly if needed)
+        # Pitch forward to move drone
+        vehicle.channels.overrides['2'] = 1600  # pitch forward
+        time.sleep(1)  # move for 1 second
+        vehicle.channels.overrides['2'] = 1500  # level out
+        # Check distance again on next loop iteration
+
+while True:
+    # Capture frame from camera and run ArUco detection
+    ret, frame = cap.read()
+    
+    if not ret:
+        continue  # skip if frame not available
+    corners, ids, rejected = aruco.detectMarkers(frame, aruco_dict, parameters=aruco_params)
+    
+    if ids is not None and len(ids) > 0:
+        # Marker detected
+        marker_found = True
+        print("ArUco marker detected!")
+        break  # exit the loop to stop ascending
+    
+    # Check timeout
+    if time.time() - search_start > 90:
+        print("Marker not found within timeout. Initiating landing...")
+        break  # exit loop due to timeout
+    
+    # If no marker yet and timeout not reached, continue ascending
+    # (For example, raise altitude or maintain upward velocity)
+    # Here you could send a MAVLink velocity command or adjust throttle.
+    # E.g., send an upward velocity command in GUIDED mode:
+    # send_ned_velocity(0, 0, +0.5)  # ascend at 0.5 m/s (NED: positive z is down, so use negative for up if using setpoint)
+    # (Implement send_ned_velocity as needed to publish MAVLink SET_POSITION_TARGET_LOCAL_NED)
+    
+    time.sleep(0.1)  # small delay to avoid tight looping
+
+if marker_found:
+    # **Marker found**: log current GPS coordinates and altitude, then land.
+    loc = vehicle.location.global_relative_frame  # relative altitude (AGL)
+    print(f"Marker found at GPS (lat, lon, alt): ({loc.lat:.6f}, {loc.lon:.6f}, {loc.alt:.2f})")
+    # Stop further ascent by changing mode to LOITER or BRAKE, if available, or just proceed to land.
+    vehicle.mode = VehicleMode("LAND")  # begin landing sequence
+    
+else:
+    # **Timeout reached**: no marker detected, initiate landing.
+    vehicle.mode = VehicleMode("LAND")
