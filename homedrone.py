@@ -1,14 +1,23 @@
-from dronekit import LocationGlobal, Command
+# Monkey patch for Python 3.12 compatibility:
+import collections
+import collections.abc
+if not hasattr(collections, 'MutableMapping'):
+    collections.MutableMapping = collections.abc.MutableMapping
 
-def set_home_to_current(vehicle):
-    current_location = vehicle.location.global_frame
-    vehicle.home_location = current_location
-    print(f"Home location set manually to: {current_location.lat}, {current_location.lon}, {current_location.alt}")
+from dronekit import connect
+import time
 
-# In your main() after connecting:
-vehicle = connect_pixhawk()
-if vehicle is None:
-    return
+# Connect (update the port if needed)
+vehicle = connect('/dev/serial0', baud=57600, wait_ready=True, heartbeat_timeout=60)
 
-# Manually set home location immediately after connection
-set_home_to_current(vehicle)
+# Wait briefly to get a valid current location
+time.sleep(2)
+
+# Force-set home location manually
+current_location = vehicle.location.global_frame
+vehicle.home_location = current_location
+
+print(f"Home location manually set to: Lat: {current_location.lat}, Lon: {current_location.lon}, Alt: {current_location.alt}")
+
+# Close vehicle connection
+vehicle.close()
