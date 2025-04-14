@@ -1,0 +1,233 @@
+import cv2
+import cv2.aruco as aruco
+import numpy as np
+import time
+import threading
+import collections
+collections.MutableMapping = collections.abc.MutableMapping  # For Python 3.12 compatibility
+
+from dronekit import connect, VehicleMode
+from pymavlink import mavutil
+
+# ----- Configuration Constants -----
+TAKEOFF_ALTITUDE = 1.0     # meters for initial takeoff hover
+ASCEND_VELOCITY = -0.3     # m/s upward in NED frame (negative Z is up)
+NO_MARKER_TIMEOUT = 90     # seconds to wait for a marker before landing
+PRE_TAKEOFF_WAIT = 5       # seconds to search for markers before takeoff
+SERIAL_BAUD = 57600
+CONNECTION_STRINGS = ['/dev/ttyAMA0', '/dev/ttyACM0', '/dev/serial0']  # possible Pixhawk ports
+
+def try_connect(conn_str, baud=SERIAL_BAUD):
+    """Attempt to connect to Pixhawk on the given connection string."""
+    try:
+        print(f"Attempting connection on {conn_str}...")
+        vehicle = connect(conn_str, baud=baud, wait_ready=False, heartbeat_timeout=60)
+        print("Connected successfully, vehicle armed state:", vehicle.armed)
+        return vehicle
+    except Exception as e:
+        print(f"Error connecting on {conn_str}: {e}")
+        return None
+
+def connect_pixhawk():
+    """Try multiple ports to connect to Pixhawk. Returns Vehicle or None."""
+    vehicle = None
+    for conn in CONNECTION_STRINGS:
+        vehicle = try_connect(conn)
+        if vehicle:
+            print(f"Connected to Pixhawk via {conn}")
+            return vehicle
+    print("Failed to connect to Pixhawk on any provided port.")
+    return None
+
+def arm_and_takeoff(vehicle, target_altitude):
+    """Arms the vehicle and flies to target_altitude (in meters) in GUIDED mode."""
+    print("Waiting for vehicle to become armable...")
+    while not vehicle.is_armable:
+        print("  ...Initializing sensors, please wait...")
+        time.sleep(1)
+    print("Arming motors...")
+    vehicle.mode = VehicleMode("GUIDED")
+    vehicle.armed = True
+    while not vehicle.armed:
+        print("  ...Waiting for arming...")
+        time.sleep(1)
+    print("Taking off!")
+    vehicle.simple_takeoff(target_altitude)
+    while True:
+        alt = vehicle.location.global_relative_frame.alt or 0.0
+        print(f"  Current Altitude: {alt:.2f} m")
+        if alt >= target_altitude * 0.95:
+            print("Target altitude reached.")
+            break
+        time.sleep(1)
+
+def start_continuous_ascent(vehicle, velocity_m_s):
+    """
+    Starts a background thread to continuously send an upward velocity command.
+    This runs until the stop_event is set.
+    """
+    stop_event = threading.Event()
+
+    def _ascend_loop():
+        msg = vehicle.message_factory.set_position_target_local_ned_encode(
+            0, 0, 0, mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            0b0000111111000111,   # type_mask (ignore pos setpoints, use velocity)
+            0, 0, 0,              # x, y, z positions (unused)
+            0, 0, velocity_m_s,    # vx, vy, vz (m/s) in NED frame (vz is negative for up)
+            0, 0, 0,              # accelerations (not used)
+            0, 0                  # yaw, yaw_rate (unused)
+        )
+        while not stop_event.is_set():
+            vehicle.send_mavlink(msg)
+            time.sleep(0.1)  # ~10 Hz
+            
+    thread = threading.Thread(target=_ascend_loop, daemon=True)
+    thread.start()
+    return stop_event, thread
+
+def init_camera():
+    """
+    Initializes the camera. It first attempts to use your GStreamer pipeline.
+    If that fails, it falls back to the default webcam (index 0).
+    """
+    # Attempt using GStreamer pipeline
+    pipeline = (
+        "libcamerasrc ! video/x-raw,format=NV12,width=1920,height=1080,framerate=30/1 ! "
+        "videoconvert ! videoscale ! video/x-raw,format=BGR ! appsink"
+    )
+    cap = cv2.VideoCapture(pipeline, cv2.CAP_GSTREAMER)
+    if cap.isOpened():
+        print("Camera initialized using GStreamer pipeline.")
+    else:
+        print("GStreamer pipeline failed. Falling back to default camera (index 0).")
+        cap = cv2.VideoCapture(0)
+        if cap.isOpened():
+            print("Camera initialized using default camera index.")
+        else:
+            print("Error: Could not open any camera source.")
+    return cap
+
+def main():
+    # 1. Connect to autopilot
+    print("Connecting to Pixhawk autopilot...")
+    vehicle = connect_pixhawk()
+    if vehicle is None:
+        return
+    
+    # 2. Initialize camera before takeoff and prepare display window
+    cap = init_camera()
+    if not cap.isOpened():
+        vehicle.close()
+        return
+    cv2.namedWindow("ArUco Detection", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("ArUco Detection", 800, 600)
+
+    # 3. Set up ArUco detection parameters
+    aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+    detector_params = aruco.DetectorParameters_create()
+
+    detection_start_time = time.time()
+
+    # 4. Pre-takeoff detection loop (search for markers on the ground)
+    print("Starting marker detection pre-takeoff...")
+    pre_takeoff_marker_found = False
+    pre_takeoff_end_time = detection_start_time + PRE_TAKEOFF_WAIT
+    while time.time() < pre_takeoff_end_time:
+        ret, frame = cap.read()
+        if not ret:
+            print("Warning: Unable to capture frame from camera during pre-takeoff.")
+            time.sleep(0.1)
+            continue
+
+        # Debug: print frame shape to ensure proper capture
+        print("Frame captured with shape:", frame.shape)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=detector_params)
+        if ids is not None and len(ids) > 0:
+            pre_takeoff_marker_found = True
+            print(f"Detected ArUco marker IDs pre-takeoff: {ids.flatten().tolist()}")
+            aruco.drawDetectedMarkers(frame, corners, ids)
+            cv2.putText(frame, "Marker Detected pre-takeoff!", (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+            cv2.imshow("ArUco Detection", frame)
+            cv2.waitKey(500)
+            break
+        else:
+            cv2.putText(frame, "Pre-takeoff scan: no marker", (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+        cv2.imshow("ArUco Detection", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            print("User requested exit (q pressed) during pre-takeoff scan.")
+            break
+        time.sleep(0.1)
+
+    if pre_takeoff_marker_found:
+        print("Marker was detected before takeoff. Aborting mission on ground.")
+        cap.release()
+        cv2.destroyAllWindows()
+        vehicle.close()
+        return
+    else:
+        print("No marker detected pre-takeoff. Proceeding with arm and takeoff.")
+        arm_and_takeoff(vehicle, TAKEOFF_ALTITUDE)
+
+    # 5. Start continuous ascent and detection loop after takeoff
+    print("Starting continuous ascent. The drone will continue ascending until a marker is detected or timeout.")
+    stop_event, ascend_thread = start_continuous_ascent(vehicle, ASCEND_VELOCITY)
+    marker_detected = False
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Warning: Unable to read frame from camera during flight.")
+            if time.time() - detection_start_time > 5:
+                print("Camera feed lost during flight. Initiating landing.")
+                break
+            time.sleep(0.1)
+            continue
+
+        # Debug: ensure the frame has valid dimensions
+        print("Flight frame shape:", frame.shape)
+        
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=detector_params)
+        if ids is not None and len(ids) > 0:
+            marker_detected = True
+            print(f"Detected ArUco marker IDs in-flight: {ids.flatten().tolist()}")
+            aruco.drawDetectedMarkers(frame, corners, ids)
+            cv2.putText(frame, "Marker Detected!", (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+            stop_event.set()
+            ascend_thread.join(timeout=1.0)
+            cv2.imshow("ArUco Detection", frame)
+            cv2.waitKey(500)
+            print("Marker detected. Stopping ascent and initiating landing.")
+            break
+        else:
+            cv2.putText(frame, "Ascending... (no marker yet)", (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+        
+        cv2.imshow("ArUco Detection", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            print("User requested exit (q pressed) during flight.")
+            break
+
+        if time.time() - detection_start_time > NO_MARKER_TIMEOUT:
+            print(f"No marker detected within {NO_MARKER_TIMEOUT} seconds. Timeout reached, stopping ascent.")
+            break
+
+    # 6. Land and cleanup
+    stop_event.set()
+    if ascend_thread.is_alive():
+        ascend_thread.join(timeout=2.0)
+    print("Commanding LAND mode...")
+    vehicle.mode = VehicleMode("LAND")
+    time.sleep(1)
+    cap.release()
+    cv2.destroyAllWindows()
+    vehicle.close()
+    print("Shutdown complete. Vehicle landing in progress (check Pixhawk telemetry).")
+
+if __name__ == "__main__":
+    main()
