@@ -10,7 +10,7 @@ from dronekit import connect, VehicleMode
 from pymavlink import mavutil
 
 # ----- Configuration Constants -----
-TAKEOFF_ALTITUDE = 1.0    # meters for initial takeoff hover
+TAKEOFF_ALTITUDE = 0.1    # meters for initial takeoff hover
 ASCEND_VELOCITY = -0.3    # m/s upward in NED frame (negative Z is up)
 NO_MARKER_TIMEOUT = 90    # seconds to wait for a marker before landing
 SERIAL_BAUD = 57600
