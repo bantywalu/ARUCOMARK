@@ -45,7 +45,7 @@ def main():
         vehicle.close()
         return
 
-    print(f"Watching for ArUco marker ID {TARGET_MARKER_ID}...")
+    print(f"Watching for ArUco markers... (target to land: ID {TARGET_MARKER_ID})")
     detection_start_time = time.time()
     try:
         while True:
@@ -61,9 +61,13 @@ def main():
             if ids is not None and len(ids) > 0:
                 lat = vehicle.location.global_frame.lat
                 lon = vehicle.location.global_frame.lon
-                for i, marker_id in enumerate(ids.flatten()):
-                    print(f"{{ GPS: ({lat:.6f}, {lon:.6f}), Marker ID: {marker_id} }}")
 
+                # Always print all detected markers
+                print(f"Detected {len(ids)} markers at GPS ({lat:.6f}, {lon:.6f}): ", end="")
+                print([marker_id for marker_id in ids.flatten()])
+
+                # Now check if TARGET_MARKER_ID is among them
+                for marker_id in ids.flatten():
                     if marker_id == TARGET_MARKER_ID:
                         print(f"Target Marker {TARGET_MARKER_ID} detected. Initiating landing...")
                         vehicle.mode = VehicleMode("LAND")
