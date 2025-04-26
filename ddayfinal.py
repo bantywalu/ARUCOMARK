@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 from dronekit import connect, VehicleMode, LocationGlobalRelative
 from pymavlink import mavutil
 
+# --- Configuration ---
+TARGET_MARKER_ID = 0  # <<< Only detect this specific marker ID
+
 # --------- Connection Helper ---------
 def safe_connect():
     possible_conns = [
@@ -35,7 +38,6 @@ def safe_connect():
     print("Unable to connect to any vehicle.")
     sys.exit(1)
 
-# Connect to vehicle
 vehicle = safe_connect()
 
 # --- Functions ---
@@ -109,9 +111,7 @@ def fly_to_center(vehicle, x0, y0, width, height):
     start_time = time.time()
     while True:
         loc = vehicle.location.global_relative_frame
-        rem_n = dN
-        rem_e = dE
-        distance = math.hypot(rem_n, rem_e)
+        distance = math.hypot(dN, dE)
         if distance < 0.5:
             print("Reached center.")
             return True
@@ -126,8 +126,8 @@ def fly_to_center(vehicle, x0, y0, width, height):
             time.sleep(5)
             return False
         speed = 1.0
-        vx = (rem_n / distance) * speed if distance != 0 else 0
-        vy = (rem_e / distance) * speed if distance != 0 else 0
+        vx = (dN / distance) * speed if distance != 0 else 0
+        vy = (dE / distance) * speed if distance != 0 else 0
         send_ned_velocity(vehicle, vx, vy, 0, duration=0.5)
 
 def nudge_to_marker_center(vehicle, marker_offset_px, cap):
@@ -150,21 +150,29 @@ def nudge_to_marker_center(vehicle, marker_offset_px, cap):
         if not ret:
             break
         corners, ids, _ = cv2.aruco.detectMarkers(frame, arucoDict, parameters=arucoParams)
-        if ids is not None and len(ids) > 0:
-            c0 = corners[0][0]
-            mkr_cx = np.mean(c0[:, 0])
-            mkr_cy = np.mean(c0[:, 1])
-            frame_cx = frame.shape[1] / 2.0
-            frame_cy = frame.shape[0] / 2.0
-            off_x = mkr_cx - frame_cx
-            off_y = mkr_cy - frame_cy
-            print(f"New offset: ({off_x:.1f}, {off_y:.1f}) px")
+        if ids is not None:
+            found = False
+            for i in range(len(ids)):
+                if ids[i][0] == TARGET_MARKER_ID:
+                    found = True
+                    c0 = corners[i][0]
+                    mkr_cx = np.mean(c0[:, 0])
+                    mkr_cy = np.mean(c0[:, 1])
+                    frame_cx = frame.shape[1] / 2.0
+                    frame_cy = frame.shape[0] / 2.0
+                    off_x = mkr_cx - frame_cx
+                    off_y = mkr_cy - frame_cy
+                    print(f"New offset: ({off_x:.1f}px, {off_y:.1f}px)")
+                    break
+            if not found:
+                print(f"Marker {TARGET_MARKER_ID} lost.")
+                break
         else:
-            print("Marker lost.")
+            print("No markers detected.")
             break
     print("Nudging complete.")
 
-# --- Main ---
+# --- Main Mission ---
 width, height = get_field_params()
 if width is None or height is None:
     vehicle.close()
@@ -208,18 +216,22 @@ while True:
         break
     out.write(frame)
     corners, ids, _ = cv2.aruco.detectMarkers(frame, arucoDict, parameters=arucoParams)
-    if ids is not None and len(ids) > 0:
-        marker_found = True
-        c0 = corners[0][0]
-        mkr_cx = np.mean(c0[:, 0])
-        mkr_cy = np.mean(c0[:, 1])
-        frame_cx = frame.shape[1] / 2.0
-        frame_cy = frame.shape[0] / 2.0
-        offset_x = mkr_cx - frame_cx
-        offset_y = mkr_cy - frame_cy
-        marker_offset = (offset_x, offset_y)
-        print("Marker detected.")
-        break
+    if ids is not None:
+        for i in range(len(ids)):
+            if ids[i][0] == TARGET_MARKER_ID:
+                marker_found = True
+                c0 = corners[i][0]
+                mkr_cx = np.mean(c0[:, 0])
+                mkr_cy = np.mean(c0[:, 1])
+                frame_cx = frame.shape[1] / 2.0
+                frame_cy = frame.shape[0] / 2.0
+                offset_x = mkr_cx - frame_cx
+                offset_y = mkr_cy - frame_cy
+                marker_offset = (offset_x, offset_y)
+                print(f"Marker {TARGET_MARKER_ID} detected.")
+                break
+        if marker_found:
+            break
     if time.time() - vertical_start > 20:
         print("Timeout: no marker.")
         break
